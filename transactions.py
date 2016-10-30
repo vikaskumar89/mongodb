@@ -1,5 +1,5 @@
 from pymongo import Connection
-from popularitem import PopularItem,ItemInfo,NewOrder
+from popularitem import ItemInfo,NewOrder,popular
 from bson.objectid import ObjectId
 import copy
 import datetime
@@ -27,9 +27,21 @@ class Transactions:
     
     def payment(self,c,w,d,payment):
         print "Inside Payment"
-    
+        result = self.wdpayment.update({"_id" : { "D_ID" : d, "W_ID" : w }},{"$inc":{"W_YTD":payment}},multi= True)
+        print "Updated Warehouse",result
+        result = self.wdpayment.update({"_id" : { "D_ID" : d, "W_ID" : w }},{"$inc":{"D_YTD":payment}})
+        print "Update District ",result
+
     def orderstatus(self, w, d, c):
         print "Inside OrderStatus"
+        result = self.order.find({"W_ID":w,"D_ID":d,"C_ID":c}).sort("_id",-1).limit(1)
+        out = ""
+        for row in result:
+            out = "Name :"+row['C_FIRST_NAME']+row['C_MIDDLE_NAME']+row['C_LAST_NAME']+"\n"
+            out += str(row['O_ID'])+"\t"+str(row['O_CARRIER_ID'])+"\t"+str(row['O_ENTRY_D'])+"\n"
+            for item in row['ORDERLINE']:
+                out += str(item['OL_I_ID'])+"\t"+str(item['OL_SUPPLY_W_ID'])+"\t"+str(item['OL_DELIVERY_D'])+"\t"+str(item['OL_QUANTITY'])+"\t"+str(item['OL_AMOUNT'])+"\n"
+        print out
 	
     def stocklevel(self,w,d,t,l):
         print "Inside stock level,Threshold is\t",t
@@ -83,7 +95,7 @@ class Transactions:
                         orderdc[oid] = pItem
 
                 else:
-                    pItem = PopularItem(oid,item,name,quan,entry_d,cid,fname,mname,lname)
+                    pItem = popular(oid,item,name,quan,entry_d,cid,fname,mname,lname)
                     orderdc[oid] = pItem
         out = ""
         for obj in orderdc.itervalues():
@@ -97,7 +109,7 @@ class Transactions:
     def topbalance(self):
         print "Inside top balance"
         customer = self.customer
-        result = customer.find({},{"C_FIRST_NAME":1,"C_MIDDLE_NAME":1,"C_LAST_NAME":1,"W_NAME":1,"D_NAME":1,"C_BALANCE":1}).sort("C_BALANCE",-1).limit(2)
+        result = customer.find({},{"C_FIRST_NAME":1,"C_MIDDLE_NAME":1,"C_LAST_NAME":1,"W_NAME":1,"D_NAME":1,"C_BALANCE":1}).sort("C_BALANCE",-1).limit(10)
         out =""
         for rows in result:
             out += rows['C_FIRST_NAME']+" "+rows['C_MIDDLE_NAME']+" "+rows['C_LAST_NAME']+"\t"+""+str(rows['C_BALANCE'])+"\n"

@@ -1,16 +1,16 @@
-class PopularItem:
-	
-	def __init__(self,oid,item,name,quantity,entry,cid,fname,mname,lname):
-		self.oid = oid
-		self.item = item
-		self.name = name
-		self.quantity = quantity
-		self.entry = entry
-		self.cid = cid
-        self.fname = fname
-        self.lname = lname
-        self.mname = mname
+class  popular:
 
+    def __init__(self,oid,item,name,quantity,entry,cid,fname,mname,lname):
+        self.oid = oid
+        self.item = item
+        self.name = name
+        self.quantity = quantity
+        self.entry = entry
+        self.cid = cid
+        self.fname = fname
+        self.mname = mname
+        self.lname = lname
+        
 
 class ItemInfo:
 
