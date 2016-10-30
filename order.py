@@ -12,8 +12,8 @@ for x in xrange(1,11):
             while(k<=2):
                 odc ={
                 "OL_NUMBER":k,
-                "O_ALL_LOCAL":1,
-                "O_I_ID":z,
+                "OL_ALL_LOCAL":1,
+                "OL_I_ID":z,
                 "OL_I_NAME":"I_NAME",
                 "OL_I_PRICE":11.00,
                 "OL_SUPPLY_W_ID":x,
@@ -25,7 +25,9 @@ for x in xrange(1,11):
                 k = k+1
                 ls.append(odc)
             record = {
-                "_id": {"W_ID":x,"D_ID":y,"O_ID":z},
+                "W_ID":x,
+                "D_ID":y,
+                "O_ID":z,
                 "C_ID":y,
                 "C_FIRST_NAME":"Vikas",
                 "C_MIDDLE_NAME":"Kumar",
@@ -36,5 +38,5 @@ for x in xrange(1,11):
                 "ORDERLINE": ls
                 }
             ids = order.insert(record)
-
+#order.createIndex({"W_ID":1,"D_ID":1,"O_ID":1})
 print str(x*y*z), " Orders successfully Inserted "

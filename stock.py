@@ -7,7 +7,8 @@ for i in xrange(1,11):
     w_ytd = 100+10*i
     for j in xrange(1,101):
         record = {
-            "_id":{"W_ID":i,"I_ID":j},
+            "W_ID":i,
+            "I_ID":j,
             "S_QUANTITY":101,
             "S_YTD":99,
             "S_ORDER_CNT":11,
