@@ -8,7 +8,8 @@ for i in xrange(1,11):
     for j in xrange(1,11):
         d_ytd = 10.2+j
         record = {
-            "_id" : {"W_ID":i,"D_ID":j},
+            "W_ID":i,
+            "D_ID":j,
             "W_YTD":w_ytd,
             "D_YTD":d_ytd,
             "D_NEXT_O_ID":1
