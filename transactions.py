@@ -21,16 +21,140 @@ class Transactions:
     
     def neworder(self,c,w,d,lis):
         print "Inside New Order"
+        count = 1
+        all_local = 1
+        for j in lis:
+            item = j.split(",")
+            if not w != item[1]:
+                all_local = 0
+                break
+        total = Decimal(0)
+        entry_d = datetime.datetime.now()
+        oid = 0
+        for row in self.wdpayment.find({"_id" : { "D_ID" : d,"W_ID" : w }},{"D_NEXT_O_ID":1}):
+            oid = row['D_NEXT_O_ID']
+        orderList = []
+        olist = []
+        for j in lis:
+            item = j.split(",")
+            olist.append(int(item[0]))	
+
+        itemdc = {}
+        for row in self.stock.find({"W_ID":w,"I_ID":{"$in":olist}},{"I_PRICE":1,"I_NAME":1,"S_QUANTITY":1,"I_ID":1}):
+            price = row['I_PRICE']
+            name = row['I_NAME']
+            squantity = row['S_QUANTITY']
+            itemdc[row['I_ID']] = ItemInfo(price,name,squantity)
+
+        oldc = {}
+        count = 1
+        itemout = ""
+
+        for j in lis:
+            item = j.split(",")
+            i_id = int(item[0])	
+            sw_id = int(item[1])	
+            i_quant = int(item[2])
+            oldc["OL_I_ID"] = i_id
+            oldc["OL_NUMBER"] = count
+            count += 1
+            oldc["OL_I_NAME"] = itemdc[i_id].name
+            oldc["OL_ALL_LOCAL"] = all_local
+            oldc["OL_SUPPLY_W_ID"] = sw_id
+            oldc["OL_DELIVERY_D"] = None 
+            oldc["OL_QUANTITY"] = i_quant
+            oldc["OL_I_PRICE"] = itemdc[i_id].price
+            oldc["OL_DIST_INFO"] = "S_DIST_"+str(d)
+            amount = itemdc[i_id].price * i_quant
+            total += amount
+            oldc["OL_AMOUNT"] = amount 
+            orderList.append(oldc)
+            rcnt = 0 if sw_id == w else 1
+            aquant = squantity-i_quant
+            if aquant < 10:
+                quant = 100-i_quant
+                self.stock.update({"W_ID":w, "I_ID":i_id},{"$inc":{"S_YTD":i_quant, "S_ORDER_CNT":1, "S_REMOTE_CNT":rcnt, "S_QUANTITY":quant}})
+            else:
+                quant = aquant
+                self.stock.update({"W_ID":w, "I_ID":i_id},{"$inc":{"S_YTD":i_quant, "S_ORDER_CNT":1, "S_REMOTE_CNT":rcnt, "S_QUANTITY":-i_quant}})
+            itemout += str(i_id)+","+itemdc[i_id].name+","+str(sw_id)+","+str(amount)+","+str(i_quant)+","+str(quant)+"\n"
+
+
+        wtax = Decimal(0)
+        dtax = Decimal(0)
+        cdiscount= Decimal(0)
+        fname = ""
+        mname = ""
+        lname = ""
+        csince = ''
+        credit = Decimal(0)
+
+        for row in self.customer.find({"_id" : { "D_ID" : d, "C_ID" : c, "W_ID" : w }},{"W_TAX":1,"D_TAX":1,"C_DISCOUNT":1,"C_FIRST_NAME":1,"C_MIDDLE_NAME":1,"C_SINCE":1,"C_CREDIT":1,"C_LAST_NAME":1}):
+            wtax = row['W_TAX']             
+            dtax = row['D_TAX']
+            cdiscount = row['C_DISCOUNT']
+            fname = row['C_FIRST_NAME']
+            mname = row['C_MIDDLE_NAME']
+            lname = row['C_LAST_NAME']
+            csince = row['C_SINCE']
+            credit = row['C_CREDIT']
+
+        total= total * (1+Decimal(wtax)+Decimal(dtax))  * Decimal((1-cdiscount))
+        #self.order.insert_one("C_FIRST_NAME":fname,"C_MIDDLE_NAME":mname,"C_LAST_NAME":lname,"W_ID":w,"D_ID":d,"C_ID":c,"O_ID":oid,"ORDERLINE":orderList,"O_CARRIER_ID":None,"O_ENTRY:D":entry_d, "O_OL_CNT":5) 
+        
+        record = {
+                "W_ID":w,
+                "D_ID":d,
+                "O_ID":oid,
+                "C_ID":c,
+                "C_FIRST_NAME":fname,
+                "C_MIDDLE_NAME":mname,
+                "C_LAST_NAME":lname,
+                "O_CARRIER_ID":None,
+                "O_ENTRY_D":datetime.datetime.utcnow(),
+                "O_OL_CNT":len(lis),
+                "ORDERLINE": orderList
+            }
+
+
+        self.order.insert(record)
+
+
+        self.wdpayment.update({"D_ID" : d, "W_ID" : w },{"$inc":{"D_NEXT_O_ID":1}})
+        out = "Customer Identifier: "+str(w)+","+str(d)+","+str(c)+"\n"
+        out += str(cdiscount)+","+str(csince)+","+str(credit)+"\n"
+        out += str(wtax)+","+str(dtax)+"\n"
+        out += str(oid)+","+str(entry_d)+"\n"
+        out += str(len(lis))+","+str(total)+"\n"
+        out += itemout+"\n"
+        print out
+
+
+
+
+
+
 
     def delivery(self,w,carrier):
         print "Inside delivery"
     
     def payment(self,c,w,d,payment):
         print "Inside Payment"
-        result = self.wdpayment.update({"_id" : { "D_ID" : d, "W_ID" : w }},{"$inc":{"W_YTD":payment}},multi= True)
-        print "Updated Warehouse",result
-        result = self.wdpayment.update({"_id" : { "D_ID" : d, "W_ID" : w }},{"$inc":{"D_YTD":payment}})
-        print "Update District ",result
+        self.wdpayment.update({"W_ID" : w },{"$inc":{"W_YTD":payment}},multi= True)
+        print "Updated Warehouse"
+        self.wdpayment.update({"D_ID" : d, "W_ID" : w },{"$inc":{"D_YTD":payment}})
+        print "Updated District"
+        self.customer.update({"_id" : { "D_ID" : d, "C_ID" : c, "W_ID" : w }},{"$inc":{"C_BALANCE":-payment, "C_YTD_PAYMENT":payment, "C_PAYMENT_CNT":1}})
+        print "Customer Updated"
+
+        out = "Customer Identifier: "+str(w)+","+str(d)+","+str(c)+"\n"
+        for row in self.customer.find({"_id" : { "D_ID" : d, "C_ID" : c, "W_ID" : w }}).limit(1):
+            out += "Name :"+row['C_FIRST_NAME']+","+row['C_MIDDLE_NAME']+","+row['C_LAST_NAME']+"\n"
+            out += row['C_STREET_1']+","+row['C_STREET_2']+","+row['C_CITY']+","+ row['C_STATE']+","+row['C_ZIP']+","+row['C_PHONE']+","+row['C_SINCE']+","+str(row['C_CREDIT'])+","+str(row['C_CREDIT_LIM'])+","+str(row['C_DISCOUNT'])+","+str(row['C_BALANCE'])+"\n"
+            out += row['W_STREET_1']+","+row['W_STREET_2']+","+row['W_CITY']+","+ row['W_STATE']+","+row['W_ZIP']+"\n"
+            out += row['D_STREET_1']+","+row['D_STREET_2']+","+row['D_CITY']+","+ row['D_STATE']+","+row['D_ZIP']+"\n"
+            out += str(payment)
+        print out 
 
     def orderstatus(self, w, d, c):
         print "Inside OrderStatus"
@@ -46,12 +170,12 @@ class Transactions:
     def stocklevel(self,w,d,t,l):
         print "Inside stock level,Threshold is\t",t
         oid = 0
-        for row in self.wdpayment.find({"_id" : { "D_ID" : 1,"W_ID" : 1 }},{"D_NEXT_O_ID":1}):
+        for row in self.wdpayment.find({"_id" : { "D_ID" : d,"W_ID" : w }},{"D_NEXT_O_ID":1}):
             oid = row['D_NEXT_O_ID']
         oid = oid-l
         count = 0
         itemset = set()
-        for row in self.order.find({"W_ID":1,"D_ID":1,"O_ID":{"$gt":oid}},{"ORDERLINE":1}):
+        for row in self.order.find({"W_ID":w,"D_ID":d,"O_ID":{"$gt":oid}},{"ORDERLINE":1}):
             orderline = row['ORDERLINE']
             for item in orderline:
                 itemid = item['OL_I_ID']
@@ -68,12 +192,12 @@ class Transactions:
     def popularItem(self,w,d,l):
         print "Inside Popular Item"
         oid = 0
-        for row in self.wdpayment.find({"_id" : { "D_ID" : 1,"W_ID" : 1 }},{"D_NEXT_O_ID":1}):
+        for row in self.wdpayment.find({"_id" : { "D_ID" : d,"W_ID" : w }},{"D_NEXT_O_ID":1}):
             oid = row['D_NEXT_O_ID']
         oid = oid-l
         count = 0
         orderdc = dict()
-        for row in self.order.find({"W_ID":1,"D_ID":1,"O_ID":{"$gt":oid}},{"ORDERLINE":1,"O_ID":1,"O_ENTRY_D":1,"C_ID":1,"C_FIRST_NAME":1,"C_MIDDLE_NAME":1,"C_LAST_NAME":1}):
+        for row in self.order.find({"W_ID":w,"D_ID":d,"O_ID":{"$gt":oid}},{"ORDERLINE":1,"O_ID":1,"O_ENTRY_D":1,"C_ID":1,"C_FIRST_NAME":1,"C_MIDDLE_NAME":1,"C_LAST_NAME":1}):
             orderline = row['ORDERLINE']
             oid = row['O_ID']
             entry_d = row['O_ENTRY_D']

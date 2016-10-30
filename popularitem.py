@@ -12,12 +12,13 @@ class  popular:
         self.lname = lname
         
 
+
 class ItemInfo:
 
-	def __init__(self,item,name,count):
-		self.item = item
+	def __init__(self,price,name,squantity):
+		self.price = price
 		self.name = name
-		self.count = count
+		self.squantity = squantity
 
 class NewOrder:
 
