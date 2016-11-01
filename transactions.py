@@ -9,6 +9,7 @@ import time
 import operator
 from operator import itemgetter
 from pprint import pprint
+
 class Transactions:
     def __init__(self):
         print "Inside init"
@@ -26,7 +27,8 @@ class Transactions:
         all_local = 1
         for j in lis:
             item = j.split(",")
-            if not w != item[1]:
+            if w != item[1]:
+                print "Not Equal"
                 all_local = 0
                 break
         total = Decimal(0)
@@ -77,11 +79,9 @@ class Transactions:
             if aquant < 10:
                 quant = 100-i_quant
                 bulk.find({"W_ID":w, "I_ID":i_id}).update({"$inc":{"S_YTD":i_quant, "S_ORDER_CNT":1, "S_REMOTE_CNT":rcnt, "S_QUANTITY":quant}})
-                #self.stock.update({"W_ID":w, "I_ID":i_id},{"$inc":{"S_YTD":i_quant, "S_ORDER_CNT":1, "S_REMOTE_CNT":rcnt, "S_QUANTITY":quant}})
             else:
                 quant = aquant
                 bulk.find({"W_ID":w, "I_ID":i_id}).update({"$inc":{"S_YTD":i_quant, "S_ORDER_CNT":1, "S_REMOTE_CNT":rcnt, "S_QUANTITY":-i_quant}})
-                #self.stock.update({"W_ID":w, "I_ID":i_id},{"$inc":{"S_YTD":i_quant, "S_ORDER_CNT":1, "S_REMOTE_CNT":rcnt, "S_QUANTITY":-i_quant}})
             itemout += str(i_id)+","+itemdc[i_id].name+","+str(sw_id)+","+str(amount)+","+str(i_quant)+","+str(quant)+"\n"
         
         bulk.execute()
@@ -159,11 +159,6 @@ class Transactions:
         bulk = self.order.initialize_ordered_bulk_op()
         cbulk = self.customer.initialize_ordered_bulk_op()
 
-        print "OrderDc:",orderdc
-        print "Count dc:",cntdc
-        print "Customer Dc:",custdc
-        print "Amount Dc:",amountdc
-
         for did,oid in orderdc.iteritems():
             bulk.find({"W_ID": w,"D_ID":did,"O_ID":oid}).update({"$set":{"O_CARRIER_ID":carrier}})
             for i in xrange(0,cntdc[did]):
@@ -203,17 +198,18 @@ class Transactions:
         print out
 	
     def stocklevel(self,w,d,t,l):
-        print "Inside stock level,Threshold is\t",t
+        print "Inside stock level,Threshold is\t",w,d,t,l
         oid = 0
-        for row in self.wdpayment.find({"_id" : { "D_ID" : d,"W_ID" : w }},{"D_NEXT_O_ID":1}):
+        for row in self.wdpayment.find({ "D_ID" : d,"W_ID" : w },{"D_NEXT_O_ID":1}):
             oid = row['D_NEXT_O_ID']
         oid = oid-l
+        print "Order id is:\t",oid
         count = 0
         itemset = set()
         for row in self.order.find({"W_ID":w,"D_ID":d,"O_ID":{"$gt":oid}},{"ORDERLINE":1}):
             orderline = row['ORDERLINE']
             for item in orderline:
-                itemid = item['OL_I_ID']
+                itemid = item["OL_I_ID"]
                 if itemid in itemset:
                     continue
                 itemset.add(itemid)
@@ -227,7 +223,7 @@ class Transactions:
     def popularItem(self,w,d,l):
         print "Inside Popular Item"
         oid = 0
-        for row in self.wdpayment.find({"_id" : { "D_ID" : d,"W_ID" : w }},{"D_NEXT_O_ID":1}):
+        for row in self.wdpayment.find({ "D_ID" : d,"W_ID" : w },{"D_NEXT_O_ID":1}):
             oid = row['D_NEXT_O_ID']
         oid = oid-l
         count = 0
