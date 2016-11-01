@@ -8,7 +8,7 @@ from decimal import Decimal
 import time
 import operator
 from operator import itemgetter
-
+from pprint import pprint
 class Transactions:
     def __init__(self):
         print "Inside init"
@@ -18,6 +18,7 @@ class Transactions:
         self.stock = db.stock
         self.wdpayment = db.wdpayment
         self.order  = db.order
+        self.dnum = 10
     
     def neworder(self,c,w,d,lis):
         print "Inside New Order"
@@ -30,9 +31,11 @@ class Transactions:
                 break
         total = Decimal(0)
         entry_d = datetime.datetime.now()
+        bulk = self.stock.initialize_ordered_bulk_op()
         oid = 0
-        for row in self.wdpayment.find({"_id" : { "D_ID" : d,"W_ID" : w }},{"D_NEXT_O_ID":1}):
+        for row in self.wdpayment.find({"D_ID" : d,"W_ID" : w },{"D_NEXT_O_ID":1}):
             oid = row['D_NEXT_O_ID']
+        print "Next Order is ",oid
         orderList = []
         olist = []
         for j in lis:
@@ -46,18 +49,18 @@ class Transactions:
             squantity = row['S_QUANTITY']
             itemdc[row['I_ID']] = ItemInfo(price,name,squantity)
 
-        oldc = {}
         count = 1
         itemout = ""
 
         for j in lis:
+            oldc = {}
             item = j.split(",")
             i_id = int(item[0])	
             sw_id = int(item[1])	
             i_quant = int(item[2])
             oldc["OL_I_ID"] = i_id
             oldc["OL_NUMBER"] = count
-            count += 1
+            count = count + 1
             oldc["OL_I_NAME"] = itemdc[i_id].name
             oldc["OL_ALL_LOCAL"] = all_local
             oldc["OL_SUPPLY_W_ID"] = sw_id
@@ -67,19 +70,21 @@ class Transactions:
             oldc["OL_DIST_INFO"] = "S_DIST_"+str(d)
             amount = itemdc[i_id].price * i_quant
             total += amount
-            oldc["OL_AMOUNT"] = amount 
+            oldc["OL_AMOUNT"] = amount
             orderList.append(oldc)
             rcnt = 0 if sw_id == w else 1
             aquant = squantity-i_quant
             if aquant < 10:
                 quant = 100-i_quant
-                self.stock.update({"W_ID":w, "I_ID":i_id},{"$inc":{"S_YTD":i_quant, "S_ORDER_CNT":1, "S_REMOTE_CNT":rcnt, "S_QUANTITY":quant}})
+                bulk.find({"W_ID":w, "I_ID":i_id}).update({"$inc":{"S_YTD":i_quant, "S_ORDER_CNT":1, "S_REMOTE_CNT":rcnt, "S_QUANTITY":quant}})
+                #self.stock.update({"W_ID":w, "I_ID":i_id},{"$inc":{"S_YTD":i_quant, "S_ORDER_CNT":1, "S_REMOTE_CNT":rcnt, "S_QUANTITY":quant}})
             else:
                 quant = aquant
-                self.stock.update({"W_ID":w, "I_ID":i_id},{"$inc":{"S_YTD":i_quant, "S_ORDER_CNT":1, "S_REMOTE_CNT":rcnt, "S_QUANTITY":-i_quant}})
+                bulk.find({"W_ID":w, "I_ID":i_id}).update({"$inc":{"S_YTD":i_quant, "S_ORDER_CNT":1, "S_REMOTE_CNT":rcnt, "S_QUANTITY":-i_quant}})
+                #self.stock.update({"W_ID":w, "I_ID":i_id},{"$inc":{"S_YTD":i_quant, "S_ORDER_CNT":1, "S_REMOTE_CNT":rcnt, "S_QUANTITY":-i_quant}})
             itemout += str(i_id)+","+itemdc[i_id].name+","+str(sw_id)+","+str(amount)+","+str(i_quant)+","+str(quant)+"\n"
-
-
+        
+        bulk.execute()
         wtax = Decimal(0)
         dtax = Decimal(0)
         cdiscount= Decimal(0)
@@ -89,7 +94,7 @@ class Transactions:
         csince = ''
         credit = Decimal(0)
 
-        for row in self.customer.find({"_id" : { "D_ID" : d, "C_ID" : c, "W_ID" : w }},{"W_TAX":1,"D_TAX":1,"C_DISCOUNT":1,"C_FIRST_NAME":1,"C_MIDDLE_NAME":1,"C_SINCE":1,"C_CREDIT":1,"C_LAST_NAME":1}):
+        for row in self.customer.find({ "D_ID" : d, "C_ID" : c, "W_ID" : w },{"W_TAX":1,"D_TAX":1,"C_DISCOUNT":1,"C_FIRST_NAME":1,"C_MIDDLE_NAME":1,"C_SINCE":1,"C_CREDIT":1,"C_LAST_NAME":1}):
             wtax = row['W_TAX']             
             dtax = row['D_TAX']
             cdiscount = row['C_DISCOUNT']
@@ -99,9 +104,7 @@ class Transactions:
             csince = row['C_SINCE']
             credit = row['C_CREDIT']
 
-        total= total * (1+Decimal(wtax)+Decimal(dtax))  * Decimal((1-cdiscount))
-        #self.order.insert_one("C_FIRST_NAME":fname,"C_MIDDLE_NAME":mname,"C_LAST_NAME":lname,"W_ID":w,"D_ID":d,"C_ID":c,"O_ID":oid,"ORDERLINE":orderList,"O_CARRIER_ID":None,"O_ENTRY:D":entry_d, "O_OL_CNT":5) 
-        
+        total= total * (1+Decimal(wtax)+Decimal(dtax)) * Decimal((1-cdiscount))
         record = {
                 "W_ID":w,
                 "D_ID":d,
@@ -111,7 +114,7 @@ class Transactions:
                 "C_MIDDLE_NAME":mname,
                 "C_LAST_NAME":lname,
                 "O_CARRIER_ID":None,
-                "O_ENTRY_D":datetime.datetime.utcnow(),
+                "O_ENTRY_D":datetime.datetime.now(),
                 "O_OL_CNT":len(lis),
                 "ORDERLINE": orderList
             }
@@ -131,24 +134,56 @@ class Transactions:
 
 
 
-
-
-
-
     def delivery(self,w,carrier):
         print "Inside delivery"
+        orderdc = {}
+        cntdc = {}
+        custdc = {}
+        oldc = {}
+        for i in range(1,self.dnum+1):
+            rows = self.order.find( {"W_ID": w,"D_ID": i ,"O_CARRIER_ID": None },{"O_ID":1,"O_OL_CNT":1,"C_ID":1,"ORDERLINE":1} ).limit(1)
+            for row in rows:
+                orderdc[i] = row['O_ID']
+                cntdc[i] = row['O_OL_CNT']
+                custdc[i] = row['C_ID']
+                oldc[i] = row['ORDERLINE']
+        amountdc = {}
+        for did, ol in oldc.iteritems():
+            amount = 0
+            for items in ol:
+                amount += items["OL_AMOUNT"]
+            amountdc[did] = amount
     
+                
+
+        bulk = self.order.initialize_ordered_bulk_op()
+        cbulk = self.customer.initialize_ordered_bulk_op()
+
+        print "OrderDc:",orderdc
+        print "Count dc:",cntdc
+        print "Customer Dc:",custdc
+        print "Amount Dc:",amountdc
+
+        for did,oid in orderdc.iteritems():
+            bulk.find({"W_ID": w,"D_ID":did,"O_ID":oid}).update({"$set":{"O_CARRIER_ID":carrier}})
+            for i in xrange(0,cntdc[did]):
+                bulk.find({"W_ID": 1,"D_ID":did,"O_ID":oid,"ORDERLINE":{"$elemMatch":{"OL_DELIVERY_D":None}}}).update({"$set":{"ORDERLINE."+str(i)+".OL_DELIVERY_D":datetime.datetime.now()}})
+            cbulk.find({"W_ID": w, "D_ID":did, "C_ID":custdc[did]}).update({"$inc":{"C_BALANCE":amountdc[did],"C_DELIVERY_CNT":1}})
+        bulk.execute()
+        cbulk.execute() 
+
+
+
+
+ 
     def payment(self,c,w,d,payment):
         print "Inside Payment"
         self.wdpayment.update({"W_ID" : w },{"$inc":{"W_YTD":payment}},multi= True)
-        print "Updated Warehouse"
         self.wdpayment.update({"D_ID" : d, "W_ID" : w },{"$inc":{"D_YTD":payment}})
-        print "Updated District"
-        self.customer.update({"_id" : { "D_ID" : d, "C_ID" : c, "W_ID" : w }},{"$inc":{"C_BALANCE":-payment, "C_YTD_PAYMENT":payment, "C_PAYMENT_CNT":1}})
-        print "Customer Updated"
+        self.customer.update({ "D_ID" : d, "C_ID" : c, "W_ID" : w },{"$inc":{"C_BALANCE":-payment, "C_YTD_PAYMENT":payment, "C_PAYMENT_CNT":1}})
 
         out = "Customer Identifier: "+str(w)+","+str(d)+","+str(c)+"\n"
-        for row in self.customer.find({"_id" : { "D_ID" : d, "C_ID" : c, "W_ID" : w }}).limit(1):
+        for row in self.customer.find( { "D_ID" : d, "C_ID" : c, "W_ID" : w }).limit(1):
             out += "Name :"+row['C_FIRST_NAME']+","+row['C_MIDDLE_NAME']+","+row['C_LAST_NAME']+"\n"
             out += row['C_STREET_1']+","+row['C_STREET_2']+","+row['C_CITY']+","+ row['C_STATE']+","+row['C_ZIP']+","+row['C_PHONE']+","+row['C_SINCE']+","+str(row['C_CREDIT'])+","+str(row['C_CREDIT_LIM'])+","+str(row['C_DISCOUNT'])+","+str(row['C_BALANCE'])+"\n"
             out += row['W_STREET_1']+","+row['W_STREET_2']+","+row['W_CITY']+","+ row['W_STATE']+","+row['W_ZIP']+"\n"

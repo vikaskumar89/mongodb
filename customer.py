@@ -7,7 +7,9 @@ count = 1
 for i in xrange(1,11):
     for j in xrange(1,11):
         record = {
-        "_id": {"W_ID":1,"D_ID":j,"C_ID":i},
+        "W_ID":1,
+        "D_ID":j,
+        "C_ID":i,
         "C_FIRST_NAME":"Vikas"+str(i),
         "C_MIDDLE_NAME":"Kumar",
         "C_LAST_NAME":"Sherawat",
@@ -24,6 +26,7 @@ for i in xrange(1,11):
         "C_BALANCE":500.0+count,
         "C_YTD_PAYMENT":700.0,
         "C_PAYMENT_CNT":34,
+        "C_DELIVERY_CNT":34,
         "C_DATA":"random data",
         "W_NAME":"W1",
         "W_TAX":.05,
