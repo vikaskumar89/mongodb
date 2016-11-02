@@ -34,11 +34,12 @@ class Transactions:
         total = Decimal(0)
         entry_d = datetime.datetime.now()
         bulk = self.stock.initialize_ordered_bulk_op()
+        obulk = self.order.initialize_ordered_bulk_op()
         oid = 0
         for row in self.wdpayment.find({"D_ID" : d,"W_ID" : w },{"D_NEXT_O_ID":1}):
             oid = row['D_NEXT_O_ID']
+
         print "Next Order is ",oid
-        orderList = []
         olist = []
         for j in lis:
             item = j.split(",")
@@ -54,37 +55,6 @@ class Transactions:
         count = 1
         itemout = ""
 
-        for j in lis:
-            oldc = {}
-            item = j.split(",")
-            i_id = int(item[0])	
-            sw_id = int(item[1])	
-            i_quant = int(item[2])
-            oldc["OL_I_ID"] = i_id
-            oldc["OL_NUMBER"] = count
-            count = count + 1
-            oldc["OL_I_NAME"] = itemdc[i_id].name
-            oldc["OL_ALL_LOCAL"] = all_local
-            oldc["OL_SUPPLY_W_ID"] = sw_id
-            oldc["OL_DELIVERY_D"] = None 
-            oldc["OL_QUANTITY"] = i_quant
-            oldc["OL_I_PRICE"] = itemdc[i_id].price
-            oldc["OL_DIST_INFO"] = "S_DIST_"+str(d)
-            amount = itemdc[i_id].price * i_quant
-            total += amount
-            oldc["OL_AMOUNT"] = amount
-            orderList.append(oldc)
-            rcnt = 0 if sw_id == w else 1
-            aquant = squantity-i_quant
-            if aquant < 10:
-                quant = 100-i_quant
-                bulk.find({"W_ID":w, "I_ID":i_id}).update({"$inc":{"S_YTD":i_quant, "S_ORDER_CNT":1, "S_REMOTE_CNT":rcnt, "S_QUANTITY":quant}})
-            else:
-                quant = aquant
-                bulk.find({"W_ID":w, "I_ID":i_id}).update({"$inc":{"S_YTD":i_quant, "S_ORDER_CNT":1, "S_REMOTE_CNT":rcnt, "S_QUANTITY":-i_quant}})
-            itemout += str(i_id)+","+itemdc[i_id].name+","+str(sw_id)+","+str(amount)+","+str(i_quant)+","+str(quant)+"\n"
-        
-        bulk.execute()
         wtax = Decimal(0)
         dtax = Decimal(0)
         cdiscount= Decimal(0)
@@ -103,24 +73,56 @@ class Transactions:
             lname = row['C_LAST_NAME']
             csince = row['C_SINCE']
             credit = row['C_CREDIT']
+        k = 1
+        for j in lis:
+            oldc = {}
+            item = j.split(",")
+            i_id = int(item[0])	
+            sw_id = int(item[1])	
+            i_quant = int(item[2])
+            oldc["OL_I_ID"] = i_id
+            count = count + 1
+            oldc["OL_I_NAME"] = itemdc[i_id].name
+            oldc["OL_ALL_LOCAL"] = all_local
+            oldc["OL_SUPPLY_W_ID"] = sw_id
+            oldc["OL_DELIVERY_D"] = None 
+            oldc["OL_QUANTITY"] = i_quant
+            oldc["OL_I_PRICE"] = itemdc[i_id].price
+            oldc["OL_DIST_INFO"] = "S_DIST_"+str(d)
+            amount = itemdc[i_id].price * i_quant
+            total += amount
+            oldc["OL_AMOUNT"] = amount
+            #orderList.append(oldc)
+            rcnt = 0 if sw_id == w else 1
+            aquant = squantity-i_quant
+            if aquant < 10:
+                quant = 100-i_quant
+                bulk.find({"W_ID":w, "I_ID":i_id}).update({"$inc":{"S_YTD":i_quant, "S_ORDER_CNT":1, "S_REMOTE_CNT":rcnt, "S_QUANTITY":quant}})
+            else:
+                quant = aquant
+                bulk.find({"W_ID":w, "I_ID":i_id}).update({"$inc":{"S_YTD":i_quant, "S_ORDER_CNT":1, "S_REMOTE_CNT":rcnt, "S_QUANTITY":-i_quant}})
+            itemout += str(i_id)+","+itemdc[i_id].name+","+str(sw_id)+","+str(amount)+","+str(i_quant)+","+str(quant)+"\n"
+            record = {
+                    "W_ID":w,
+                    "D_ID":d,
+                    "O_ID":oid,
+                    "C_ID":c,
+                    "C_FIRST_NAME":fname,
+                    "C_MIDDLE_NAME":mname,
+                    "C_LAST_NAME":lname,
+                    "O_CARRIER_ID":None,
+                    "O_ENTRY_D":datetime.datetime.now(),
+                    "O_OL_CNT":len(lis),
+                    "OL_NUMBER":k,
+                    "ORDERLINE": oldc
+            }
+            k += 1
+            obulk.insert(record)
+        
+        bulk.execute()
+        obulk.execute()
 
         total= total * (1+Decimal(wtax)+Decimal(dtax)) * Decimal((1-cdiscount))
-        record = {
-                "W_ID":w,
-                "D_ID":d,
-                "O_ID":oid,
-                "C_ID":c,
-                "C_FIRST_NAME":fname,
-                "C_MIDDLE_NAME":mname,
-                "C_LAST_NAME":lname,
-                "O_CARRIER_ID":None,
-                "O_ENTRY_D":datetime.datetime.now(),
-                "O_OL_CNT":len(lis),
-                "ORDERLINE": orderList
-            }
-
-
-        self.order.insert(record)
 
 
         self.wdpayment.update({"D_ID" : d, "W_ID" : w },{"$inc":{"D_NEXT_O_ID":1}})
@@ -141,17 +143,19 @@ class Transactions:
         custdc = {}
         oldc = {}
         for i in range(1,self.dnum+1):
-            rows = self.order.find( {"W_ID": w,"D_ID": i ,"O_CARRIER_ID": None },{"O_ID":1,"O_OL_CNT":1,"C_ID":1,"ORDERLINE":1} ).limit(1)
+            rows = self.order.find( {"W_ID": w,"D_ID": i ,"O_CARRIER_ID": None },{"O_ID":1,"O_OL_CNT":1,"C_ID":1} ).limit(1)
             for row in rows:
                 orderdc[i] = row['O_ID']
                 cntdc[i] = row['O_OL_CNT']
                 custdc[i] = row['C_ID']
-                oldc[i] = row['ORDERLINE']
         amountdc = {}
-        for did, ol in oldc.iteritems():
-            amount = 0
-            for items in ol:
-                amount += items["OL_AMOUNT"]
+        for did, oid in orderdc.iteritems():
+            pipeline = [{ "$match": {     "$and": [         {"W_ID":2},         {"D_ID":1}, {"O_ID":5}     ] } }, { "$group": { "_id" : None, "sum" : {"$sum": "$ORDERLINE.OL_AMOUNT" } } }]
+            result = self.order.aggregate(pipeline)
+            #result = self.order.aggregate({ "$match": {     "$and": [         {"W_ID":2},         {"D_ID":1}, {"O_ID":5}     ] } }, { "$group": { "_id" : None, "sum" : {"$sum": "$ORDERLINE.OL_AMOUNT" } } })
+            #result = self.order.aggregate({"$match":{"$and":[{"W_ID":2},{"D_ID":1}, {"O_ID":5}]}},{"$group":{"_id" : None,"sum" : {"$sum": "$ORDERLINE.OL_AMOUNT" } } })
+            amount = result['result'][0]['sum']
+            print "Total OL_AMOUNT :",str(amount)
             amountdc[did] = amount
     
                 
@@ -160,9 +164,9 @@ class Transactions:
         cbulk = self.customer.initialize_ordered_bulk_op()
 
         for did,oid in orderdc.iteritems():
-            bulk.find({"W_ID": w,"D_ID":did,"O_ID":oid}).update({"$set":{"O_CARRIER_ID":carrier}})
-            for i in xrange(0,cntdc[did]):
-                bulk.find({"W_ID": 1,"D_ID":did,"O_ID":oid,"ORDERLINE":{"$elemMatch":{"OL_DELIVERY_D":None}}}).update({"$set":{"ORDERLINE."+str(i)+".OL_DELIVERY_D":datetime.datetime.now()}})
+            #bulk.find({"W_ID": w,"D_ID":did,"O_ID":oid}).update({"$set":{"O_CARRIER_ID":carrier}})
+            print "Distrit ID and OrderID\t",did,oid 
+            bulk.find({"W_ID": w,"D_ID":did,"O_ID":oid}).update({"$set":{"O_CARRIER_ID":carrier, "ORDERLINE.OL_DELIVERY_D":datetime.datetime.now()}})
             cbulk.find({"W_ID": w, "D_ID":did, "C_ID":custdc[did]}).update({"$inc":{"C_BALANCE":amountdc[did],"C_DELIVERY_CNT":1}})
         bulk.execute()
         cbulk.execute() 
@@ -193,8 +197,12 @@ class Transactions:
         for row in result:
             out = "Name :"+row['C_FIRST_NAME']+row['C_MIDDLE_NAME']+row['C_LAST_NAME']+"\n"
             out += str(row['O_ID'])+"\t"+str(row['O_CARRIER_ID'])+"\t"+str(row['O_ENTRY_D'])+"\n"
-            for item in row['ORDERLINE']:
-                out += str(item['OL_I_ID'])+"\t"+str(item['OL_SUPPLY_W_ID'])+"\t"+str(item['OL_DELIVERY_D'])+"\t"+str(item['OL_QUANTITY'])+"\t"+str(item['OL_AMOUNT'])+"\n"
+            item  = row['ORDERLINE']
+            out += str(item['OL_I_ID'])+"\t"
+            out += str(item['OL_SUPPLY_W_ID'])+"\t"
+            out += str(item['OL_DELIVERY_D'])+"\t"
+            out += str(item['OL_QUANTITY'])+"\t"
+            out += str(item['OL_AMOUNT'])+"\n"
         print out
 	
     def stocklevel(self,w,d,t,l):
@@ -207,12 +215,11 @@ class Transactions:
         count = 0
         itemset = set()
         for row in self.order.find({"W_ID":w,"D_ID":d,"O_ID":{"$gt":oid}},{"ORDERLINE":1}):
-            orderline = row['ORDERLINE']
-            for item in orderline:
-                itemid = item["OL_I_ID"]
-                if itemid in itemset:
-                    continue
-                itemset.add(itemid)
+            item = row['ORDERLINE']
+            itemid = item["OL_I_ID"]
+            if itemid in itemset:
+                continue
+            itemset.add(itemid)
         itemset = list(itemset)
         for row in self.stock.find({"W_ID":w,"I_ID":{"$in":itemset}},{"S_QUANTITY"}):
             if row['S_QUANTITY'] < t:
@@ -229,29 +236,28 @@ class Transactions:
         count = 0
         orderdc = dict()
         for row in self.order.find({"W_ID":w,"D_ID":d,"O_ID":{"$gt":oid}},{"ORDERLINE":1,"O_ID":1,"O_ENTRY_D":1,"C_ID":1,"C_FIRST_NAME":1,"C_MIDDLE_NAME":1,"C_LAST_NAME":1}):
-            orderline = row['ORDERLINE']
+            items= row['ORDERLINE']
             oid = row['O_ID']
             entry_d = row['O_ENTRY_D']
             cid = row['C_ID']
             fname = row['C_FIRST_NAME']
             mname = row['C_MIDDLE_NAME']
             lname = row['C_LAST_NAME']
-            for items in orderline:
-                quan = items['OL_QUANTITY'] 
-                item = items['OL_I_ID']
-                name = items['OL_I_NAME']
-                if oid in orderdc:
-                    pItem = orderdc[oid]
-                    if pItem.quantity < quan:
-                        pItem.item = item
-                        pItem.quantity = quan
-                        pItem.entry = entry_d
-                        pItem.name = name
-                        orderdc[oid] = pItem
-
-                else:
-                    pItem = popular(oid,item,name,quan,entry_d,cid,fname,mname,lname)
+            quan = items['OL_QUANTITY'] 
+            item = items['OL_I_ID']
+            name = items['OL_I_NAME']
+            if oid in orderdc:
+                pItem = orderdc[oid]
+                if pItem.quantity < quan:
+                    pItem.item = item
+                    pItem.quantity = quan
+                    pItem.entry = entry_d
+                    pItem.name = name
                     orderdc[oid] = pItem
+
+            else:
+                pItem = popular(oid,item,name,quan,entry_d,cid,fname,mname,lname)
+                orderdc[oid] = pItem
         out = ""
         for obj in orderdc.itervalues():
             out += "Order Id and Entry Date:"+str(obj.oid)+","+str(obj.entry)+"\n"
