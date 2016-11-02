@@ -137,7 +137,7 @@ class Transactions:
 
 
     def delivery(self,w,carrier):
-        print "Inside delivery"
+        print "Inside delivery:"
         orderdc = {}
         cntdc = {}
         custdc = {}
