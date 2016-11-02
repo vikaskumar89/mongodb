@@ -35,7 +35,7 @@ class MyThread (threading.Thread):
 	def readFile(self,fname):
 		with open(fname) as f:
 			content = [x.strip('\n') for x in f.readlines()]
-		t = Transactions()
+		t = Transactions(self.id)
 		i = 0
 		tcount = 0
 		while i < len(content):

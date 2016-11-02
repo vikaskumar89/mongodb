@@ -11,7 +11,7 @@ from operator import itemgetter
 from pprint import pprint
 
 class Transactions:
-    def __init__(self):
+    def __init__(self,fid):
         print "Inside init"
         connection = Connection()
         db = connection['warehouse8']
@@ -20,6 +20,10 @@ class Transactions:
         self.wdpayment = db.wdpayment
         self.order  = db.order
         self.dnum = 10
+        self.fname = 'output/'+str(fid)+'-output.txt'
+        if os.path.isfile(self.fname):
+            os.remove(self.fname)
+        self.file = open(self.fname,'a')
     
     def neworder(self,c,w,d,lis):
         print "Inside New Order"
@@ -28,7 +32,6 @@ class Transactions:
         for j in lis:
             item = j.split(",")
             if w != item[1]:
-                print "Not Equal"
                 all_local = 0
                 break
         total = Decimal(0)
@@ -39,7 +42,6 @@ class Transactions:
         for row in self.wdpayment.find({"D_ID" : d,"W_ID" : w },{"D_NEXT_O_ID":1}):
             oid = row['D_NEXT_O_ID']
 
-        print "Next Order is ",oid
         olist = []
         for j in lis:
             item = j.split(",")
@@ -132,7 +134,7 @@ class Transactions:
         out += str(oid)+","+str(entry_d)+"\n"
         out += str(len(lis))+","+str(total)+"\n"
         out += itemout+"\n"
-        print out
+        self.file.write(out)
 
 
 
@@ -155,7 +157,6 @@ class Transactions:
             #result = self.order.aggregate({ "$match": {     "$and": [         {"W_ID":2},         {"D_ID":1}, {"O_ID":5}     ] } }, { "$group": { "_id" : None, "sum" : {"$sum": "$ORDERLINE.OL_AMOUNT" } } })
             #result = self.order.aggregate({"$match":{"$and":[{"W_ID":2},{"D_ID":1}, {"O_ID":5}]}},{"$group":{"_id" : None,"sum" : {"$sum": "$ORDERLINE.OL_AMOUNT" } } })
             amount = result['result'][0]['sum']
-            print "Total OL_AMOUNT :",str(amount)
             amountdc[did] = amount
     
                 
@@ -165,7 +166,6 @@ class Transactions:
 
         for did,oid in orderdc.iteritems():
             #bulk.find({"W_ID": w,"D_ID":did,"O_ID":oid}).update({"$set":{"O_CARRIER_ID":carrier}})
-            print "Distrit ID and OrderID\t",did,oid 
             bulk.find({"W_ID": w,"D_ID":did,"O_ID":oid}).update({"$set":{"O_CARRIER_ID":carrier, "ORDERLINE.OL_DELIVERY_D":datetime.datetime.now()}})
             cbulk.find({"W_ID": w, "D_ID":did, "C_ID":custdc[did]}).update({"$inc":{"C_BALANCE":amountdc[did],"C_DELIVERY_CNT":1}})
         bulk.execute()
@@ -188,7 +188,7 @@ class Transactions:
             out += row['W_STREET_1']+","+row['W_STREET_2']+","+row['W_CITY']+","+ row['W_STATE']+","+row['W_ZIP']+"\n"
             out += row['D_STREET_1']+","+row['D_STREET_2']+","+row['D_CITY']+","+ row['D_STATE']+","+row['D_ZIP']+"\n"
             out += str(payment)
-        print out 
+        self.file.write(out)
 
     def orderstatus(self, w, d, c):
         print "Inside OrderStatus"
@@ -203,7 +203,7 @@ class Transactions:
             out += str(item['OL_DELIVERY_D'])+"\t"
             out += str(item['OL_QUANTITY'])+"\t"
             out += str(item['OL_AMOUNT'])+"\n"
-        print out
+            self.file.write(out)
 	
     def stocklevel(self,w,d,t,l):
         print "Inside stock level,Threshold is\t",w,d,t,l
@@ -211,7 +211,6 @@ class Transactions:
         for row in self.wdpayment.find({ "D_ID" : d,"W_ID" : w },{"D_NEXT_O_ID":1}):
             oid = row['D_NEXT_O_ID']
         oid = oid-l
-        print "Order id is:\t",oid
         count = 0
         itemset = set()
         for row in self.order.find({"W_ID":w,"D_ID":d,"O_ID":{"$gt":oid}},{"ORDERLINE":1}):
@@ -224,7 +223,8 @@ class Transactions:
         for row in self.stock.find({"W_ID":w,"I_ID":{"$in":itemset}},{"S_QUANTITY"}):
             if row['S_QUANTITY'] < t:
                 count += 1
-        print "Total Item less than threshold is: ",count
+        out = "Total Item less than threshold is: "+str(count)
+        self.file.write(out)
         
 
     def popularItem(self,w,d,l):
@@ -263,7 +263,7 @@ class Transactions:
             out += "Order Id and Entry Date:"+str(obj.oid)+","+str(obj.entry)+"\n"
             out += "Customers who placed the order:"+obj.fname+","+obj.mname+","+obj.lname+"\n"
             out += "Item name and quantity of popular item:"+obj.name+","+str(obj.quantity)+"\n"
-        print out
+        self.file.write(out)
              
         
 
@@ -275,5 +275,5 @@ class Transactions:
         for rows in result:
             out += rows['C_FIRST_NAME']+" "+rows['C_MIDDLE_NAME']+" "+rows['C_LAST_NAME']+"\t"+""+str(rows['C_BALANCE'])+"\n"
             out += rows['W_NAME']+":"+rows['D_NAME']+"\n"
-        print out
+        self.file.write(out)
    
