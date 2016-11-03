@@ -13,7 +13,8 @@ from pprint import pprint
 class Transactions:
     def __init__(self,fid):
         print "Inside init"
-        connection = Connection()
+        connection = MongoClient('localhost', 27017)
+        #connection = Connection()
         db = connection['warehouse8']
         self.customer = db.customer
         self.stock = db.stock
