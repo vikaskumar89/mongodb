@@ -1,4 +1,4 @@
-from pymongo import Connection
+from pymongo import Connection,MongoClient
 from popularitem import ItemInfo,NewOrder,popular
 from bson.objectid import ObjectId
 import copy
@@ -8,26 +8,39 @@ from decimal import Decimal
 import time
 import operator
 from operator import itemgetter
-from pprint import pprint
 
 class Transactions:
     def __init__(self,fid):
-        print "Inside init"
+        #Node 26: 192.168.48.245
         connection = MongoClient('localhost', 27017)
-        #connection = Connection()
-        db = connection['warehouse8']
+        db = connection['d8']
         self.customer = db.customer
         self.stock = db.stock
         self.wdpayment = db.wdpayment
         self.order  = db.order
         self.dnum = 10
+        self.ntime = 0.0
+        self.ptime = 0.0
+        self.dtime = 0.0
+        self.otime = 0.0
+        self.stime = 0.0
+        self.Itime = 0.0
+        self.Ttime = 0.0
+        self.nc = 0
+        self.pc = 0
+        self.dc = 0
+        self.oc = 0
+        self.sc = 0
+        self.Ic = 0
+        self.Tc = 0
         self.fname = 'output/'+str(fid)+'-output.txt'
         if os.path.isfile(self.fname):
             os.remove(self.fname)
         self.file = open(self.fname,'a')
     
     def neworder(self,c,w,d,lis):
-        print "Inside New Order"
+        ti = time.time()
+        self.nc += 1
         count = 1
         all_local = 1
         for j in lis:
@@ -40,7 +53,7 @@ class Transactions:
         bulk = self.stock.initialize_ordered_bulk_op()
         obulk = self.order.initialize_ordered_bulk_op()
         oid = 0
-        for row in self.wdpayment.find({"D_ID" : d,"W_ID" : w },{"D_NEXT_O_ID":1}):
+        for row in self.wdpayment.find({"W_ID" : w,"D_ID" : d },{"D_NEXT_O_ID":1}).limit(1):
             oid = row['D_NEXT_O_ID']
 
         olist = []
@@ -67,7 +80,7 @@ class Transactions:
         csince = ''
         credit = Decimal(0)
 
-        for row in self.customer.find({ "D_ID" : d, "C_ID" : c, "W_ID" : w },{"W_TAX":1,"D_TAX":1,"C_DISCOUNT":1,"C_FIRST_NAME":1,"C_MIDDLE_NAME":1,"C_SINCE":1,"C_CREDIT":1,"C_LAST_NAME":1}):
+        for row in self.customer.find({ "W_ID" : w, "D_ID" : d, "C_ID" : c },{"W_TAX":1,"D_TAX":1,"C_DISCOUNT":1,"C_FIRST_NAME":1,"C_MIDDLE_NAME":1,"C_SINCE":1,"C_CREDIT":1,"C_LAST_NAME":1}):
             wtax = row['W_TAX']             
             dtax = row['D_TAX']
             cdiscount = row['C_DISCOUNT']
@@ -93,7 +106,7 @@ class Transactions:
             oldc["OL_I_PRICE"] = itemdc[i_id].price
             oldc["OL_DIST_INFO"] = "S_DIST_"+str(d)
             amount = itemdc[i_id].price * i_quant
-            total += amount
+            total += Decimal(amount)
             oldc["OL_AMOUNT"] = amount
             #orderList.append(oldc)
             rcnt = 0 if sw_id == w else 1
@@ -128,7 +141,7 @@ class Transactions:
         total= total * (1+Decimal(wtax)+Decimal(dtax)) * Decimal((1-cdiscount))
 
 
-        self.wdpayment.update({"D_ID" : d, "W_ID" : w },{"$inc":{"D_NEXT_O_ID":1}})
+        self.wdpayment.update({"W_ID" : w, "D_ID" : d },{"$inc":{"D_NEXT_O_ID":1}})
         out = "Customer Identifier: "+str(w)+","+str(d)+","+str(c)+"\n"
         out += str(cdiscount)+","+str(csince)+","+str(credit)+"\n"
         out += str(wtax)+","+str(dtax)+"\n"
@@ -136,11 +149,13 @@ class Transactions:
         out += str(len(lis))+","+str(total)+"\n"
         out += itemout+"\n"
         self.file.write(out)
+        self.ntime += time.time()-ti
 
 
 
     def delivery(self,w,carrier):
-        print "Inside delivery:"
+        ti = time.time()
+        self.dc += 1
         orderdc = {}
         cntdc = {}
         custdc = {}
@@ -152,48 +167,56 @@ class Transactions:
                 cntdc[i] = row['O_OL_CNT']
                 custdc[i] = row['C_ID']
         amountdc = {}
+        sti = time.time()
+        #print "Time taken in selecting oldest order:",sti-ti
         for did, oid in orderdc.iteritems():
-            pipeline = [{ "$match": {     "$and": [         {"W_ID":2},         {"D_ID":1}, {"O_ID":5}     ] } }, { "$group": { "_id" : None, "sum" : {"$sum": "$ORDERLINE.OL_AMOUNT" } } }]
+            pipeline = [{ "$match": {     "$and": [         {"W_ID":w},         {"D_ID":did}, {"O_ID":oid}     ] } }, { "$group": { "_id" : None, "sum" : {"$sum": "$ORDERLINE.OL_AMOUNT" } } }]
             result = self.order.aggregate(pipeline)
-            #result = self.order.aggregate({ "$match": {     "$and": [         {"W_ID":2},         {"D_ID":1}, {"O_ID":5}     ] } }, { "$group": { "_id" : None, "sum" : {"$sum": "$ORDERLINE.OL_AMOUNT" } } })
-            #result = self.order.aggregate({"$match":{"$and":[{"W_ID":2},{"D_ID":1}, {"O_ID":5}]}},{"$group":{"_id" : None,"sum" : {"$sum": "$ORDERLINE.OL_AMOUNT" } } })
             amount = result['result'][0]['sum']
             amountdc[did] = amount
     
                 
+        tti = time.time()
+        #print "Time taken in calculating the total amount: ",tti-sti
 
         bulk = self.order.initialize_ordered_bulk_op()
         cbulk = self.customer.initialize_ordered_bulk_op()
 
         for did,oid in orderdc.iteritems():
-            #bulk.find({"W_ID": w,"D_ID":did,"O_ID":oid}).update({"$set":{"O_CARRIER_ID":carrier}})
             bulk.find({"W_ID": w,"D_ID":did,"O_ID":oid}).update({"$set":{"O_CARRIER_ID":carrier, "ORDERLINE.OL_DELIVERY_D":datetime.datetime.now()}})
             cbulk.find({"W_ID": w, "D_ID":did, "C_ID":custdc[did]}).update({"$inc":{"C_BALANCE":amountdc[did],"C_DELIVERY_CNT":1}})
-        bulk.execute()
-        cbulk.execute() 
+        try:
+            bulk.execute()
+            cbulk.execute()
+        except Exception:
+            out = 'Exception Occured in bulk execution'
+            self.file.write(out)
+        finally:
+            #print "Time taken in bulk update: ",time.time()-ti
+            self.dtime += time.time()-ti
 
 
-
-
- 
     def payment(self,c,w,d,payment):
-        print "Inside Payment"
+        ti = time.time()
+        self.pc += 1
         self.wdpayment.update({"W_ID" : w },{"$inc":{"W_YTD":payment}},multi= True)
-        self.wdpayment.update({"D_ID" : d, "W_ID" : w },{"$inc":{"D_YTD":payment}})
-        self.customer.update({ "D_ID" : d, "C_ID" : c, "W_ID" : w },{"$inc":{"C_BALANCE":-payment, "C_YTD_PAYMENT":payment, "C_PAYMENT_CNT":1}})
+        self.wdpayment.update({"W_ID" : w, "D_ID" : d },{"$inc":{"D_YTD":payment}})
+        self.customer.update({ "W_ID" : w, "D_ID" : d, "C_ID" : c },{"$inc":{"C_BALANCE":-payment, "C_YTD_PAYMENT":payment, "C_PAYMENT_CNT":1}})
 
         out = "Customer Identifier: "+str(w)+","+str(d)+","+str(c)+"\n"
-        for row in self.customer.find( { "D_ID" : d, "C_ID" : c, "W_ID" : w }).limit(1):
+        for row in self.customer.find( { "W_ID" : w, "D_ID" : d, "C_ID" : c }).limit(1):
             out += "Name :"+row['C_FIRST_NAME']+","+row['C_MIDDLE_NAME']+","+row['C_LAST_NAME']+"\n"
-            out += row['C_STREET_1']+","+row['C_STREET_2']+","+row['C_CITY']+","+ row['C_STATE']+","+row['C_ZIP']+","+row['C_PHONE']+","+row['C_SINCE']+","+str(row['C_CREDIT'])+","+str(row['C_CREDIT_LIM'])+","+str(row['C_DISCOUNT'])+","+str(row['C_BALANCE'])+"\n"
-            out += row['W_STREET_1']+","+row['W_STREET_2']+","+row['W_CITY']+","+ row['W_STATE']+","+row['W_ZIP']+"\n"
-            out += row['D_STREET_1']+","+row['D_STREET_2']+","+row['D_CITY']+","+ row['D_STATE']+","+row['D_ZIP']+"\n"
+            out += row['C_STREET_1']+","+row['C_STREET_2']+","+row['C_CITY']+","+ row['C_STATE']+","+str(row['C_ZIP'])+","+str(row['C_PHONE'])+","+row['C_SINCE']+","+str(row['C_CREDIT'])+","+str(row['C_CREDIT_LIM'])+","+str(row['C_DISCOUNT'])+","+str(row['C_BALANCE'])+"\n"
+            out += row['W_STREET_1']+","+row['W_STREET_2']+","+row['W_CITY']+","+ row['W_STATE']+","+str(row['W_ZIP'])+"\n"
+            out += row['D_STREET_1']+","+row['D_STREET_2']+","+row['D_CITY']+","+ row['D_STATE']+","+str(row['D_ZIP'])+"\n"
             out += str(payment)
         self.file.write(out)
+        self.ptime += time.time()-ti
 
     def orderstatus(self, w, d, c):
-        print "Inside OrderStatus"
-        result = self.order.find({"W_ID":w,"D_ID":d,"C_ID":c}).sort("_id",-1).limit(1)
+        ti = time.time()
+        self.oc += 1
+        result = self.order.find({"W_ID":w,"D_ID":d,"C_ID":c}).limit(1)
         out = ""
         for row in result:
             out = "Name :"+row['C_FIRST_NAME']+row['C_MIDDLE_NAME']+row['C_LAST_NAME']+"\n"
@@ -205,11 +228,14 @@ class Transactions:
             out += str(item['OL_QUANTITY'])+"\t"
             out += str(item['OL_AMOUNT'])+"\n"
             self.file.write(out)
+            self.otime += time.time()-ti
+
 	
     def stocklevel(self,w,d,t,l):
-        print "Inside stock level,Threshold is\t",w,d,t,l
+        ti = time.time()
+        self.sc += 1
         oid = 0
-        for row in self.wdpayment.find({ "D_ID" : d,"W_ID" : w },{"D_NEXT_O_ID":1}):
+        for row in self.wdpayment.find({ "W_ID" : w,"D_ID" : d },{"D_NEXT_O_ID":1}).limit(1):
             oid = row['D_NEXT_O_ID']
         oid = oid-l
         count = 0
@@ -226,15 +252,18 @@ class Transactions:
                 count += 1
         out = "Total Item less than threshold is: "+str(count)
         self.file.write(out)
+        self.stime += time.time()-ti
         
 
     def popularItem(self,w,d,l):
-        print "Inside Popular Item"
+        ti = time.time()
+        self.Ic += 1
         oid = 0
-        for row in self.wdpayment.find({ "D_ID" : d,"W_ID" : w },{"D_NEXT_O_ID":1}):
+        for row in self.wdpayment.find({"W_ID" : w,"D_ID" : d },{"D_NEXT_O_ID":1}).limit(1):
             oid = row['D_NEXT_O_ID']
         oid = oid-l
         count = 0
+        orderset = set()
         orderdc = dict()
         for row in self.order.find({"W_ID":w,"D_ID":d,"O_ID":{"$gt":oid}},{"ORDERLINE":1,"O_ID":1,"O_ENTRY_D":1,"C_ID":1,"C_FIRST_NAME":1,"C_MIDDLE_NAME":1,"C_LAST_NAME":1}):
             items= row['ORDERLINE']
@@ -247,7 +276,7 @@ class Transactions:
             quan = items['OL_QUANTITY'] 
             item = items['OL_I_ID']
             name = items['OL_I_NAME']
-            if oid in orderdc:
+            if oid in orderset:
                 pItem = orderdc[oid]
                 if pItem.quantity < quan:
                     pItem.item = item
@@ -257,6 +286,7 @@ class Transactions:
                     orderdc[oid] = pItem
 
             else:
+                orderset.add(oid)
                 pItem = popular(oid,item,name,quan,entry_d,cid,fname,mname,lname)
                 orderdc[oid] = pItem
         out = ""
@@ -265,11 +295,13 @@ class Transactions:
             out += "Customers who placed the order:"+obj.fname+","+obj.mname+","+obj.lname+"\n"
             out += "Item name and quantity of popular item:"+obj.name+","+str(obj.quantity)+"\n"
         self.file.write(out)
+        self.Itime += time.time()-ti
              
         
 
     def topbalance(self):
-        print "Inside top balance"
+        ti = time.time()
+        self.Tc += 1
         customer = self.customer
         result = customer.find({},{"C_FIRST_NAME":1,"C_MIDDLE_NAME":1,"C_LAST_NAME":1,"W_NAME":1,"D_NAME":1,"C_BALANCE":1}).sort("C_BALANCE",-1).limit(10)
         out =""
@@ -277,4 +309,5 @@ class Transactions:
             out += rows['C_FIRST_NAME']+" "+rows['C_MIDDLE_NAME']+" "+rows['C_LAST_NAME']+"\t"+""+str(rows['C_BALANCE'])+"\n"
             out += rows['W_NAME']+":"+rows['D_NAME']+"\n"
         self.file.write(out)
+        self.Ttime += time.time()-ti
    

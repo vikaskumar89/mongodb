@@ -18,7 +18,7 @@ class MyThread (threading.Thread):
 		start = time.time()
 		count = 0
 		try:
-			fname = os.getcwd()+'/testdata/'+str(self.id)+'.txt'
+			fname = os.getcwd()+'/trans8/'+str(self.id)+'.txt'
                 	count = self.readFile(fname)
 		except Exception as e:
 			print "Thread:"+str(self.id)+" interrupted"
@@ -82,20 +82,20 @@ class MyThread (threading.Thread):
 			else:
 				print 'Input Mistmatch'
 			i = i+1;i
-		#if t.ntime != 0:
-		#	print self.id,"\tNew Order:\t",t.ntime,"\t\t",t.nc,"\t",t.nc/t.ntime
-		#if t.ptime != 0:
-		#	print self.id,"\tPayment :\t",t.ptime,"\t\t",t.pc,"\t",t.pc/t.ptime
-		#if t.dtime != 0:
-		#	print self.id,"\tDelivery:\t",t.dtime,"\t\t",t.dc,"\t",t.dc/t.dtime
-		#if t.otime != 0:
-		#	print self.id,"\tOrder Status:\t",t.otime,"\t\t",t.oc,"\t",t.oc/t.otime
-		#if t.stime != 0:
-		#	print self.id,"\tStock Level:\t",t.stime,"\t\t",t.sc,"\t",t.sc/t.stime
-		#if t.Itime != 0:
-		#	print self.id,"\tPopular Item:\t",t.Itime,"\t\t",t.Ic,"\t",t.Ic/t.Itime
-		#if t.Ttime != 0:
-		#	print self.id,"\tTop Balance:\t",t.Ttime,"\t\t",t.Tc,"\t",t.Tc/t.Ttime
+		if t.ntime != 0:
+			print self.id,"\tNew Order:\t",t.ntime,"\t\t",t.nc,"\t",t.nc/t.ntime
+		if t.ptime != 0:
+			print self.id,"\tPayment :\t",t.ptime,"\t\t",t.pc,"\t",t.pc/t.ptime
+		if t.dtime != 0:
+			print self.id,"\tDelivery:\t",t.dtime,"\t\t",t.dc,"\t",t.dc/t.dtime
+		if t.otime != 0:
+			print self.id,"\tOrder Status:\t",t.otime,"\t\t",t.oc,"\t",t.oc/t.otime
+		if t.stime != 0:
+			print self.id,"\tStock Level:\t",t.stime,"\t\t",t.sc,"\t",t.sc/t.stime
+		if t.Itime != 0:
+			print self.id,"\tPopular Item:\t",t.Itime,"\t\t",t.Ic,"\t",t.Ic/t.Itime
+		if t.Ttime != 0:
+			print self.id,"\tTop Balance:\t",t.Ttime,"\t\t",t.Tc,"\t",t.Tc/t.Ttime
 		return tcount;
 
 class MainThread:
